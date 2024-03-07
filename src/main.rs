@@ -2,8 +2,8 @@ use clap::Parser;
 use image::RgbImage;
 use rand::random;
 use rayon::iter::ParallelIterator;
-use std::fmt::{Display, Formatter, Result, Write};
-use std::{ops};
+use std::fmt::{Display, Formatter, Result};
+use std::{fs, ops, path};
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 struct c64 {
@@ -102,7 +102,7 @@ fn newton_iter(mut point: c64, roots: &[c64]) -> Option<[u8; 2]> {
     }
     None
 }
-fn make_random_im(nx: u32, ny: u32, len: usize, pattern: PatternFn, mut path: String) {
+fn make_random_im(nx: u32, ny: u32, len: usize, pattern: PatternFn, dir: &str) {
     let y_sep = 1.0 / ny as f64;
     let x_sep = 1.0 / nx as f64;
     let x_start = -0.5;
@@ -123,18 +123,15 @@ fn make_random_im(nx: u32, ny: u32, len: usize, pattern: PatternFn, mut path: St
             &colors,
         ))
     });
-	path.push_str("/");
-    for root in roots.iter() {
-        write!(path, "{}", root).unwrap();
-        if path.len() > 200 {
-            path.push_str("...");
-            break;
-        }
-    }
-    path.push_str(".png");
+    let path: path::PathBuf = [
+        dir.to_string(),
+        roots.iter().take(19).map(|r| format!("{r}")).collect::<String>()+ ".png",
+    ]
+    .iter()
+    .collect();
+
     imgbuf.save(path).unwrap();
 }
-#[allow(dead_code)]
 fn shade(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
     match value {
         Some(i) => colors[i[0] as usize]
@@ -146,7 +143,6 @@ fn shade(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
         None => [0, 0, 0],
     }
 }
-#[allow(dead_code)]
 fn invert(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
     match value {
         Some(i) => colors[i[0] as usize]
@@ -158,7 +154,6 @@ fn invert(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
         None => [0, 0, 0],
     }
 }
-#[allow(dead_code)]
 fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
     match value {
         Some(i) => colors[i[0] as usize],
@@ -167,7 +162,7 @@ fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
 }
 type Color = [u8; 3];
 type PatternFn = fn(Option<[u8; 2]>, &[Color]) -> Color;
-#[derive(Parser,Debug)]
+#[derive(Parser, Debug)]
 struct Args {
     #[arg(short, long)]
     cores: Option<usize>,
@@ -182,25 +177,26 @@ struct Args {
 }
 fn main() {
     let args = Args::parse();
-	println!("{:?}",args);
+    println!("{:?}", args);
     if let Some(i) = args.cores {
         rayon::ThreadPoolBuilder::new()
             .num_threads(i)
             .build_global()
             .unwrap();
     }
-	let pattern: PatternFn = match args.pattern.as_str(){
-		"shade" => shade,
-		"invert"=> invert,
-		_ => flat
-	};
- 	let path = match args.size{
-		d if d < 10000 => "small",
-		d if d > 10000 => "large",
-		_ => "fractals"
-	}.to_string();
+    let pattern: PatternFn = match args.pattern.as_str() {
+        "shade" => shade,
+        "invert" => invert,
+        _ => flat,
+    };
+    let path = match args.size {
+        d if d < 10000 => "small",
+        d if d > 10000 => "large",
+        _ => "fract",
+    };
+	let _ = fs::create_dir(path);
 	for i in 0..args.number {
-        make_random_im(args.size, args.size, args.len, pattern, path.clone());
+        make_random_im(args.size, args.size, args.len, pattern, path);
         println!("made image {} in the {} folder", i + 1, path);
     }
 }
