@@ -1,2 +1,5 @@
-/target
-/fractals
+target
+vendor
+.DS_Store
+Cargo.lock
+*.png
