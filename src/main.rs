@@ -3,7 +3,7 @@ use image::RgbImage;
 use rand::random;
 use rayon::iter::ParallelIterator;
 use std::fmt::{Display, Formatter, Result};
-use std::{fs, ops, path};
+use std::{fs, ops, path, time};
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 struct c64 {
@@ -210,8 +210,8 @@ fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
         None => [0, 0, 0],
     }
 }
-fn make_randoms(args:Args){
-	let number = args.number;
+fn make_randoms(args: Args) {
+    let number = args.number;
     let path = match args.size {
         d if d < 10000 => "small",
         d if d > 10000 => "large",
@@ -219,8 +219,16 @@ fn make_randoms(args:Args){
     };
     let _ = fs::create_dir(path);
     for i in 0..number {
+        let now = time::Instant::now();
         make_im((&args).into(), path);
-        println!("made image {} in the {} folder", i + 1, path);
+        let later = now.elapsed().as_nanos();
+        println!(
+            "put im #{} in {} dir; took {}ns, {}ns/px",
+            i + 1,
+            path,
+            later,
+            later / (args.size * args.size) as u128
+        );
     }
 }
 type Color = [u8; 3];
@@ -234,7 +242,7 @@ fn main() {
             .build_global()
             .unwrap();
     }
-	make_randoms(args);
+    make_randoms(args);
 }
 #[cfg(test)]
 mod tests {
