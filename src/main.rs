@@ -4,7 +4,7 @@ use rand::random;
 use rayon::iter::ParallelIterator;
 use std::fmt::{Display, Formatter, Result};
 use std::{fs, ops, path};
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 struct c64 {
     r: f64,
@@ -75,7 +75,47 @@ impl ops::Div<&c64> for &c64 {
         }
     }
 }
-
+struct FractalData {
+    y_res: u32,
+    x_res: u32,
+    top_left: c64,
+    bot_right: c64,
+    pattern: PatternFn,
+    roots: Option<Vec<c64>>,
+    colors: Option<Vec<Color>>,
+    num_roots: usize,
+}
+impl From<&Args> for FractalData {
+    fn from(args: &Args) -> Self {
+        FractalData {
+            y_res: args.size,
+            x_res: args.size,
+            top_left: c64::new(-0.5, -0.5),
+            bot_right: c64::new(0.5, 0.5),
+            pattern: match args.pattern.as_str() {
+                "shade" => shade,
+                "invert" => invert,
+                _ => flat,
+            },
+            colors: None,
+            roots: None,
+            num_roots: args.len,
+        }
+    }
+}
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long)]
+    cores: Option<usize>,
+    #[arg(short, long, default_value_t = 10000)]
+    size: u32,
+    #[arg(short, long, default_value_t = 20)]
+    len: usize,
+    #[arg(short, long, default_value = "flat")]
+    pattern: String,
+    #[arg(short, long, default_value_t = 1)]
+    number: usize,
+}
 fn f(x: &c64, roots: &[c64]) -> c64 {
     roots
         .iter()
@@ -102,20 +142,26 @@ fn newton_iter(mut point: c64, roots: &[c64]) -> Option<[u8; 2]> {
     }
     None
 }
-fn make_random_im(nx: u32, ny: u32, len: usize, pattern: PatternFn, dir: &str) {
-    let y_sep = 1.0 / ny as f64;
-    let x_sep = 1.0 / nx as f64;
-    let x_start = -0.5;
-    let y_start = -0.5;
-    let roots: Vec<c64> = (0..len)
-        .map(|_| c64::new(random::<f64>() - 0.5, random::<f64>() - 0.5))
-        .collect();
-    let colors: Vec<Color> = (0..len)
-        .map(|_| [random::<u8>(), random::<u8>(), random::<u8>()])
-        .collect();
-    let mut imgbuf: RgbImage = image::ImageBuffer::new(nx, ny);
+fn make_im(data: FractalData, dir: &str) {
+    let y_sep = (data.top_left.i - data.bot_right.i) / (data.y_res as f64);
+    let x_sep = (data.top_left.r - data.bot_right.r) / (data.x_res as f64);
+    let x_start = data.top_left.r;
+    let y_start = data.top_left.r;
+    let roots = match data.roots {
+        Some(r) => r,
+        None => (0..data.num_roots)
+            .map(|_| c64::new(random::<f64>() - 0.5, random::<f64>() - 0.5))
+            .collect::<Vec<c64>>(),
+    };
+    let colors = match data.colors {
+        Some(c) => c,
+        None => (0..data.num_roots)
+            .map(|_| [random::<u8>(), random::<u8>(), random::<u8>()])
+            .collect::<Vec<Color>>(),
+    };
+    let mut imgbuf: RgbImage = image::ImageBuffer::new(data.x_res, data.y_res);
     imgbuf.par_enumerate_pixels_mut().for_each(|(x, y, pixel)| {
-        *pixel = image::Rgb(pattern(
+        *pixel = image::Rgb((data.pattern)(
             newton_iter(
                 c64::new((x as f64 * x_sep) + x_start, (y as f64 * y_sep) + y_start),
                 &roots,
@@ -125,11 +171,15 @@ fn make_random_im(nx: u32, ny: u32, len: usize, pattern: PatternFn, dir: &str) {
     });
     let path: path::PathBuf = [
         dir.to_string(),
-        roots.iter().take(19).map(|r| format!("{r}")).collect::<String>()+ ".png",
+        roots
+            .iter()
+            .take(19)
+            .map(|r| format!("{r}"))
+            .collect::<String>()
+            + ".png",
     ]
     .iter()
     .collect();
-
     imgbuf.save(path).unwrap();
 }
 fn shade(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
@@ -160,21 +210,21 @@ fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
         None => [0, 0, 0],
     }
 }
+fn make_randoms(args:Args){
+	let number = args.number;
+    let path = match args.size {
+        d if d < 10000 => "small",
+        d if d > 10000 => "large",
+        _ => "fract",
+    };
+    let _ = fs::create_dir(path);
+    for i in 0..number {
+        make_im((&args).into(), path);
+        println!("made image {} in the {} folder", i + 1, path);
+    }
+}
 type Color = [u8; 3];
 type PatternFn = fn(Option<[u8; 2]>, &[Color]) -> Color;
-#[derive(Parser, Debug)]
-struct Args {
-    #[arg(short, long)]
-    cores: Option<usize>,
-    #[arg(short, long, default_value_t = 10000)]
-    size: u32,
-    #[arg(short, long, default_value_t = 20)]
-    len: usize,
-    #[arg(short, long, default_value = "flat")]
-    pattern: String,
-    #[arg(short, long, default_value_t = 1)]
-    number: usize,
-}
 fn main() {
     let args = Args::parse();
     println!("{:?}", args);
@@ -184,21 +234,7 @@ fn main() {
             .build_global()
             .unwrap();
     }
-    let pattern: PatternFn = match args.pattern.as_str() {
-        "shade" => shade,
-        "invert" => invert,
-        _ => flat,
-    };
-    let path = match args.size {
-        d if d < 10000 => "small",
-        d if d > 10000 => "large",
-        _ => "fract",
-    };
-	let _ = fs::create_dir(path);
-	for i in 0..args.number {
-        make_random_im(args.size, args.size, args.len, pattern, path);
-        println!("made image {} in the {} folder", i + 1, path);
-    }
+	make_randoms(args);
 }
 #[cfg(test)]
 mod tests {
