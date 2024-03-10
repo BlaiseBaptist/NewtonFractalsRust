@@ -1,3 +1,5 @@
 use egui for display
+	-change res live to get constant frame rate
+	-fit to screen aspect ratio
 be able to input roots + colors file 
 graphics card usage??
