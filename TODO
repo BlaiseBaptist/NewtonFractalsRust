@@ -1,4 +1,4 @@
-use egui for display
+use egui for interactive display
 	-change res live to get constant frame rate
 	-fit to screen aspect ratio
 be able to input roots + colors file 
