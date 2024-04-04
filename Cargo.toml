@@ -10,6 +10,7 @@ clap = { version = "4.5.1", features = ["derive"] }
 image = {version = "0.24.9",features = ["rayon"]}
 rand = "0.8.5"
 rayon = {version = "1.9.0"}
+regex = "1.10.4"
 
 [profile.release]
 debug = true

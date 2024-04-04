@@ -2,6 +2,7 @@ use clap::Parser;
 use image::RgbImage;
 use rand::random;
 use rayon::iter::ParallelIterator;
+use regex::Regex;
 use std::fmt::{Display, Formatter, Result};
 use std::{fs, ops, path, time};
 #[derive(Debug, PartialEq, Clone)]
@@ -31,8 +32,31 @@ impl From<i32> for c64 {
         }
     }
 }
+impl From<&str> for c64 {
+    fn from(s: &str) -> Self {
+        let pattern = Regex::new(r"(?ix)(?<r>-?[\d\.]+)?\+?(?:(?<i>-?[\d\.])i)?$").unwrap();
+        let caps: c64 = match pattern.captures(s) {
+            Some(cap) => c64 {
+                r: match cap.name("r") {
+                    Some(v) => v.as_str().parse().expect("bad regex"),
+                    None => 0.0,
+                },
+                i: match cap.name("i") {
+                    Some(v) => v.as_str().parse().expect("bad regex"),
+                    None => 0.0,
+                },
+            },
+            None => 0.0.into(),
+        };
+        return caps;
+    }
+}
 impl Display for c64 {
     fn fmt(&self, f: &mut Formatter) -> Result {
+        if self.i == 0.0 {
+            return write!(f, "({:.2})", self.r);
+        }
+
         if self.i > 0.0 {
             return write!(f, "({:.2}+{:.2}i)", self.r, self.i);
         }
@@ -79,6 +103,7 @@ struct Fractal {
     image: RgbImage,
     path: path::PathBuf,
 }
+#[derive(Debug)]
 struct FractalData {
     y_res: u32,
     x_res: u32,
@@ -87,11 +112,10 @@ struct FractalData {
     pattern: PatternFn,
     roots: Vec<c64>,
     colors: Vec<Color>,
-    num_im: usize,
     path: path::PathBuf,
 }
-impl From<Args> for FractalData {
-    fn from(args: Args) -> Self {
+impl From<&Args> for FractalData {
+    fn from(args: &Args) -> Self {
         let path: path::PathBuf = match args.size {
             d if d < 10000 => "small",
             d if d > 10000 => "large",
@@ -115,7 +139,31 @@ impl From<Args> for FractalData {
             roots: (0..args.len)
                 .map(|_| c64::new(random::<f64>() - 0.5, random::<f64>() - 0.5))
                 .collect::<Vec<c64>>(),
-            num_im: args.number,
+            path: path,
+        }
+    }
+}
+impl FractalData {
+    fn new(args: &Args, data: (Vec<c64>, Vec<Color>)) -> Self {
+        let path: path::PathBuf = match args.size {
+            d if d < 10000 => "small",
+            d if d > 10000 => "large",
+            _ => "fract",
+        }
+        .into();
+        let _ = fs::create_dir(path.clone());
+        FractalData {
+            y_res: args.size,
+            x_res: args.size,
+            top_left: c64::new(-100.0, -100.0),
+            bot_right: c64::new(100.0, 100.0),
+            pattern: match args.pattern.as_str() {
+                "shade" => shade,
+                "invert" => invert,
+                _ => flat,
+            },
+            colors: data.1,
+            roots: data.0,
             path: path,
         }
     }
@@ -137,8 +185,8 @@ struct Args {
     #[arg(short, long, default_value_t = 1, help = "Number of images to make")]
     number: usize,
 
-    #[arg(short, long, help = "Make from csv")]
-    file: Option<path::PathBuf>,
+    #[arg(short, long, help = "Make from csv", default_value = " ")]
+    file: path::PathBuf,
 }
 fn f(x: &c64, roots: &[c64]) -> c64 {
     roots
@@ -167,8 +215,8 @@ fn newton_iter(mut point: c64, roots: &[c64]) -> Option<[u8; 2]> {
     None
 }
 fn make_im(data: &FractalData) -> Fractal {
-    let y_sep = (data.top_left.i - data.bot_right.i) / (data.y_res as f64);
-    let x_sep = (data.top_left.r - data.bot_right.r) / (data.x_res as f64);
+    let y_sep = (data.bot_right.i - data.top_left.i) / (data.y_res as f64);
+    let x_sep = (data.bot_right.r - data.top_left.r) / (data.x_res as f64);
     let x_start = data.top_left.r;
     let y_start = data.top_left.r;
     let mut imgbuf: RgbImage = image::ImageBuffer::new(data.x_res, data.y_res);
@@ -226,17 +274,43 @@ fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
 }
 type Color = [u8; 3];
 type PatternFn = fn(Option<[u8; 2]>, &[Color]) -> Color;
-fn main() {
-    let args = Args::parse();
-    println!("{:?}", args);
-    if let Some(i) = args.cores {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(i)
-            .build_global()
-            .unwrap();
+fn decode_file(contents: String) -> (Vec<c64>, Vec<Color>) {
+    let mut roots: Vec<c64> = Vec::new();
+    let mut colors: Vec<Color> = Vec::new();
+    for line in contents.lines().skip(1) {
+        let mut values = line.split(";");
+        let root: c64 = match values.next() {
+            Some(r) => r.trim().into(),
+            None => 0.0.into(),
+        };
+        let color = match values.next() {
+            Some(c) => c
+                .trim()
+                .split(",")
+                .cycle()
+                .take(3)
+                .map(|c| match c.parse::<u8>() {
+                    Ok(val) => val,
+                    Err(_) => 0,
+                })
+                .collect::<Vec<u8>>()
+                .try_into()
+                .unwrap(),
+            None => [0, 0, 0],
+        };
+		println!("root: {}, color: {:?}",root,color);
+        roots.push(root);
+        colors.push(color);
     }
-    let data: FractalData = args.into();
-    for i in 0..data.num_im {
+    return (roots, colors);
+}
+fn make_ims(args: Args) {
+    let len = args.number;
+    for i in 0..len {
+        let data: FractalData = match fs::read_to_string(&args.file) {
+            Ok(f) => FractalData::new(&args, decode_file(f)),
+            Err(_) => (&args).into(),
+        };
         let now = time::Instant::now();
         let fractal = make_im(&data);
         let later = now.elapsed().as_nanos();
@@ -249,6 +323,17 @@ fn main() {
         );
         let _ = fractal.image.save(fractal.path);
     }
+}
+fn main() {
+    let args = Args::parse();
+    println!("{:?}", args);
+    if let Some(i) = args.cores {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(i)
+            .build_global()
+            .unwrap();
+    }
+	make_ims(args);
 }
 #[cfg(test)]
 mod tests {
