@@ -155,8 +155,8 @@ impl FractalData {
         FractalData {
             y_res: args.size,
             x_res: args.size,
-            top_left: c64::new(-100.0, -100.0),
-            bot_right: c64::new(100.0, 100.0),
+            top_left: c64::new(-0.5, -0.5),
+            bot_right: c64::new(0.5, 0.5),
             pattern: match args.pattern.as_str() {
                 "shade" => shade,
                 "invert" => invert,
