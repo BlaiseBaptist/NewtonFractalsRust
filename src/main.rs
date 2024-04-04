@@ -1,3 +1,4 @@
+#![feature(iter_intersperse)]
 use clap::Parser;
 use image::RgbImage;
 use rand::random;
@@ -298,7 +299,7 @@ fn decode_file(contents: String) -> (Vec<c64>, Vec<Color>) {
                 .unwrap(),
             None => [0, 0, 0],
         };
-		println!("root: {}, color: {:?}",root,color);
+        println!("root: {}, color: {:?}", root, color);
         roots.push(root);
         colors.push(color);
     }
@@ -315,10 +316,17 @@ fn make_ims(args: Args) {
         let fractal = make_im(&data);
         let later = now.elapsed().as_nanos();
         println!(
-            "put im #{} in {} dir; took {}ns, {}ns/px",
+            "Put image #{} in {} folder; took {}ns,  {}ns/px",
             i + 1,
             data.path.display(),
-            later,
+            later
+                .to_string()
+                .as_bytes()
+                .rchunks(3)
+                .rev()
+                .map(|v| std::str::from_utf8(v).unwrap())
+                .collect::<Vec<_>>()
+                .join(","),
             later / (data.x_res * data.y_res) as u128
         );
         let _ = fractal.image.save(fractal.path);
@@ -333,7 +341,7 @@ fn main() {
             .build_global()
             .unwrap();
     }
-	make_ims(args);
+    make_ims(args);
 }
 #[cfg(test)]
 mod tests {
