@@ -1,11 +1,18 @@
-#![feature(iter_intersperse)]
 use clap::Parser;
-use image::RgbImage;
+use image::{ImageBuffer, RgbImage};
 use rand::random;
 use rayon::iter::ParallelIterator;
 use regex::Regex;
-use std::fmt::{Display, Formatter, Result};
-use std::{fs, ops, path, time};
+use std::{
+    convert::TryFrom,
+    fmt::{Display, Formatter},
+    fs::{create_dir, read_to_string},
+    num::ParseFloatError,
+    ops,
+    path::PathBuf,
+    str,
+    time::Instant,
+};
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 struct c64 {
@@ -33,6 +40,17 @@ impl From<i32> for c64 {
         }
     }
 }
+
+impl TryFrom<(regex::Match<'_>, regex::Match<'_>)> for c64 {
+    type Error = ParseFloatError;
+
+    fn try_from(v: (regex::Match<'_>, regex::Match<'_>)) -> Result<Self, Self::Error> {
+        Ok(c64 {
+            r: v.0.as_str().parse()?,
+            i: v.1.as_str().parse()?,
+        })
+    }
+}
 impl From<&str> for c64 {
     fn from(s: &str) -> Self {
         let pattern = Regex::new(r"(?ix)(?<r>-?[\d\.]+)?\+?(?:(?<i>-?[\d\.])i)?$").unwrap();
@@ -53,7 +71,7 @@ impl From<&str> for c64 {
     }
 }
 impl Display for c64 {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         if self.i == 0.0 {
             return write!(f, "({:.2})", self.r);
         }
@@ -102,7 +120,7 @@ impl ops::Div<&c64> for &c64 {
 }
 struct Fractal {
     image: RgbImage,
-    path: path::PathBuf,
+    path: PathBuf,
 }
 #[derive(Debug)]
 struct FractalData {
@@ -113,17 +131,17 @@ struct FractalData {
     pattern: PatternFn,
     roots: Vec<c64>,
     colors: Vec<Color>,
-    path: path::PathBuf,
+    path: PathBuf,
 }
 impl From<&Args> for FractalData {
     fn from(args: &Args) -> Self {
-        let path: path::PathBuf = match args.size {
+        let path: PathBuf = match args.size {
             d if d < 10000 => "small",
             d if d > 10000 => "large",
             _ => "fract",
         }
         .into();
-        let _ = fs::create_dir(path.clone());
+        let _ = create_dir(path.clone());
         FractalData {
             y_res: args.size,
             x_res: args.size,
@@ -145,19 +163,26 @@ impl From<&Args> for FractalData {
     }
 }
 impl FractalData {
-    fn new(args: &Args, data: (Vec<c64>, Vec<Color>)) -> Self {
-        let path: path::PathBuf = match args.size {
+    fn new(args: &Args, data: (Vec<c64>, Vec<Color>, Option<(c64, c64)>)) -> Self {
+        let path: PathBuf = match args.size {
             d if d < 10000 => "small",
             d if d > 10000 => "large",
             _ => "fract",
         }
         .into();
-        let _ = fs::create_dir(path.clone());
+        let _ = create_dir(path.clone());
+        let bounds = data.2.unzip();
         FractalData {
             y_res: args.size,
             x_res: args.size,
-            top_left: c64::new(-0.5, -0.5),
-            bot_right: c64::new(0.5, 0.5),
+            top_left: match bounds.0 {
+                Some(v) => v,
+                None => c64::new(-0.5, -0.5),
+            },
+            bot_right: match bounds.1 {
+                Some(v) => v,
+                None => c64::new(0.5, 0.5),
+            },
             pattern: match args.pattern.as_str() {
                 "shade" => shade,
                 "invert" => invert,
@@ -187,7 +212,7 @@ struct Args {
     number: usize,
 
     #[arg(short, long, help = "Make from csv", default_value = " ")]
-    file: path::PathBuf,
+    file: PathBuf,
 }
 fn f(x: &c64, roots: &[c64]) -> c64 {
     roots
@@ -220,7 +245,7 @@ fn make_im(data: &FractalData) -> Fractal {
     let x_sep = (data.bot_right.r - data.top_left.r) / (data.x_res as f64);
     let x_start = data.top_left.r;
     let y_start = data.top_left.r;
-    let mut imgbuf: RgbImage = image::ImageBuffer::new(data.x_res, data.y_res);
+    let mut imgbuf: RgbImage = ImageBuffer::new(data.x_res, data.y_res);
     imgbuf.par_enumerate_pixels_mut().for_each(|(x, y, pixel)| {
         *pixel = image::Rgb((data.pattern)(
             newton_iter(
@@ -275,10 +300,26 @@ fn flat(value: Option<[u8; 2]>, colors: &[Color]) -> Color {
 }
 type Color = [u8; 3];
 type PatternFn = fn(Option<[u8; 2]>, &[Color]) -> Color;
-fn decode_file(contents: String) -> (Vec<c64>, Vec<Color>) {
+fn decode_file(contents: String) -> (Vec<c64>, Vec<Color>, Option<(c64, c64)>) {
     let mut roots: Vec<c64> = Vec::new();
     let mut colors: Vec<Color> = Vec::new();
-    for line in contents.lines().skip(1) {
+    let mut lines = contents.lines();
+    let pattern =
+        Regex::new(r"\((?<tx>[\d\.-]+),(?<ty>[\d\.-]+)\)\D*\((?<bx>[\d\.-]+),(?<by>[\d\.-]+)\)")
+            .unwrap();
+    let bounds: Option<(c64, c64)> = match pattern.captures(lines.next().unwrap()) {
+        Some(c) => (c.name("tx").unwrap(), c.name("ty").unwrap())
+            .try_into()
+            .ok()
+            .zip(
+                (c.name("bx").unwrap(), c.name("by").unwrap())
+                    .try_into()
+                    .ok(),
+            ),
+        None => None,
+    };
+    println!("bounds: {:?}", bounds);
+    for line in lines {
         let mut values = line.split(";");
         let root: c64 = match values.next() {
             Some(r) => r.trim().into(),
@@ -303,16 +344,16 @@ fn decode_file(contents: String) -> (Vec<c64>, Vec<Color>) {
         roots.push(root);
         colors.push(color);
     }
-    return (roots, colors);
+    return (roots, colors, bounds);
 }
 fn make_ims(args: Args) {
     let len = args.number;
     for i in 0..len {
-        let data: FractalData = match fs::read_to_string(&args.file) {
+        let data: FractalData = match read_to_string(&args.file) {
             Ok(f) => FractalData::new(&args, decode_file(f)),
             Err(_) => (&args).into(),
         };
-        let now = time::Instant::now();
+        let now = Instant::now();
         let fractal = make_im(&data);
         let later = now.elapsed().as_nanos();
         println!(
@@ -324,7 +365,7 @@ fn make_ims(args: Args) {
                 .as_bytes()
                 .rchunks(3)
                 .rev()
-                .map(|v| std::str::from_utf8(v).unwrap())
+                .map(|v| str::from_utf8(v).unwrap())
                 .collect::<Vec<_>>()
                 .join(","),
             later / (data.x_res * data.y_res) as u128
@@ -341,8 +382,9 @@ fn main() {
             .build_global()
             .unwrap();
     }
-    make_ims(args);
+	make_ims(args);
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
