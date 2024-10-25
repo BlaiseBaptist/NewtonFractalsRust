@@ -1,4 +1,7 @@
 use clap::Parser;
+use iced;
+use iced::widget;
+use image::buffer::ConvertBuffer;
 use image::{ImageBuffer, RgbImage};
 use rand::random;
 use rayon::iter::ParallelIterator;
@@ -118,9 +121,45 @@ impl ops::Div<&c64> for &c64 {
         }
     }
 }
+#[derive(Debug)]
+enum Message {
+    GenerateNew(c64, c64),
+}
+struct Renderer {
+    image: RgbImage,
+    data: FractalData,
+}
+impl Renderer {
+    fn new(im: RgbImage, data: FractalData) -> (Self, iced::Task<Message>) {
+        (
+            Renderer {
+                image: im,
+                data: data,
+            },
+            iced::Task::none(),
+        )
+    }
+    fn view(&self) -> iced::Element<Message> {
+        let rgba_im: image::RgbaImage = self.image.convert();
+        widget::image::Image::new(widget::image::Handle::from_rgba(
+            self.data.x_res, self.data.y_res, rgba_im.as_raw().clone(),
+        ))
+        .into()
+        //widget::image::Viewer::new("test.png").into()
+    }
+    fn update(&mut self, message: Message) {
+        match message {
+            Message::GenerateNew(tl, br) => {
+                self.data.top_left = tl;
+                self.data.bot_right = br;
+                self.image = make_im(&self.data).image;
+            }
+        }
+    }
+}
 struct Fractal {
     image: RgbImage,
-    path: PathBuf,
+    path: Option<PathBuf>,
 }
 #[derive(Debug)]
 struct FractalData {
@@ -131,20 +170,27 @@ struct FractalData {
     pattern: PatternFn,
     roots: Vec<c64>,
     colors: Vec<Color>,
-    path: PathBuf,
+    path: Option<PathBuf>,
 }
 impl From<&Args> for FractalData {
     fn from(args: &Args) -> Self {
-        let path: PathBuf = match args.size {
-            d if d < 10000 => "small",
-            d if d > 10000 => "large",
-            _ => "fract",
-        }
-        .into();
-        let _ = create_dir(path.clone());
+        let mut size = args.size;
+        let path: Option<PathBuf> = if !args.interactive {
+            let temp: PathBuf = match args.size {
+                d if d < 10000 => "small",
+                d if d > 10000 => "large",
+                _ => "fract",
+            }
+            .into();
+            let _ = create_dir(temp.clone());
+            Some(temp)
+        } else {
+            size = 2000;
+            None
+        };
         FractalData {
-            y_res: args.size,
-            x_res: args.size,
+            y_res: size,
+            x_res: size,
             top_left: c64::new(-0.5, -0.5),
             bot_right: c64::new(0.5, 0.5),
             pattern: match args.pattern.as_str() {
@@ -164,13 +210,18 @@ impl From<&Args> for FractalData {
 }
 impl FractalData {
     fn new(args: &Args, data: (Vec<c64>, Vec<Color>, Option<(c64, c64)>)) -> Self {
-        let path: PathBuf = match args.size {
-            d if d < 10000 => "small",
-            d if d > 10000 => "large",
-            _ => "fract",
-        }
-        .into();
-        let _ = create_dir(path.clone());
+        let path: Option<PathBuf> = if !args.interactive {
+            let temp: PathBuf = match args.size {
+                d if d < 10000 => "small",
+                d if d > 10000 => "large",
+                _ => "fract",
+            }
+            .into();
+            let _ = create_dir(temp.clone());
+            Some(temp)
+        } else {
+            None
+        };
         let bounds = data.2.unzip();
         FractalData {
             y_res: args.size,
@@ -213,6 +264,9 @@ struct Args {
 
     #[arg(short, long, help = "Make from csv", default_value = " ")]
     file: PathBuf,
+
+    #[arg(short, long, help = "interactive")]
+    interactive: bool,
 }
 fn f(x: &c64, roots: &[c64]) -> c64 {
     roots
@@ -256,17 +310,22 @@ fn make_im(data: &FractalData) -> Fractal {
         ))
     });
     Fractal {
-        path: [
-            data.path.display().to_string(),
-            data.roots
+        path: match &data.path {
+            Some(p) => Some(
+                [
+                    p.display().to_string(),
+                    data.roots
+                        .iter()
+                        .take(19)
+                        .map(|r| format!("{r}"))
+                        .collect::<String>()
+                        + ".png",
+                ]
                 .iter()
-                .take(19)
-                .map(|r| format!("{r}"))
-                .collect::<String>()
-                + ".png",
-        ]
-        .iter()
-        .collect(),
+                .collect(),
+            ),
+            None => None,
+        },
         image: imgbuf,
     }
 }
@@ -356,21 +415,44 @@ fn make_ims(args: Args) {
         let now = Instant::now();
         let fractal = make_im(&data);
         let later = now.elapsed().as_nanos();
-        println!(
-            "Put image #{} in {} folder; took {}ns,  {}ns/px",
-            i + 1,
-            data.path.display(),
-            later
-                .to_string()
-                .as_bytes()
-                .rchunks(3)
-                .rev()
-                .map(|v| str::from_utf8(v).unwrap())
-                .collect::<Vec<_>>()
-                .join(","),
-            later / (data.x_res * data.y_res) as u128
-        );
-        let _ = fractal.image.save(fractal.path);
+        match fractal.path {
+            Some(p) => {
+                println!(
+                    "Put image #{} in {} folder; took {}ns,  {}ns/px",
+                    i + 1,
+                    p.display(),
+                    later
+                        .to_string()
+                        .as_bytes()
+                        .rchunks(3)
+                        .rev()
+                        .map(|v| str::from_utf8(v).unwrap())
+                        .collect::<Vec<_>>()
+                        .join(","),
+                    later / (data.x_res * data.y_res) as u128
+                );
+                let _ = fractal.image.save(p);
+            }
+            None => {
+                let _ = iced::application("fractal", Renderer::update, Renderer::view).run_with(
+                    move || {
+                        Renderer::new(
+                            fractal.image,
+                            FractalData {
+                                y_res: 2000,
+                                x_res: 2000,
+                                top_left: data.top_left,
+                                bot_right: data.bot_right,
+                                pattern: data.pattern.clone(),
+                                colors: data.colors,
+                                roots: data.roots,
+                                path: None,
+                            },
+                        )
+                    },
+                );
+            }
+        }
     }
 }
 fn main() {
@@ -382,7 +464,7 @@ fn main() {
             .build_global()
             .unwrap();
     }
-	make_ims(args);
+    make_ims(args);
 }
 
 #[cfg(test)]
