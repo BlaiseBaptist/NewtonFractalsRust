@@ -1,6 +1,6 @@
 use clap::Parser;
 use iced;
-use iced::widget;
+use iced::{advanced, widget};
 use image::buffer::ConvertBuffer;
 use image::{ImageBuffer, RgbImage};
 use rand::random;
@@ -121,7 +121,7 @@ impl ops::Div<&c64> for &c64 {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Message {
     GenerateNew(c64, c64),
 }
@@ -141,11 +141,13 @@ impl Renderer {
     }
     fn view(&self) -> iced::Element<Message> {
         let rgba_im: image::RgbaImage = self.image.convert();
-        widget::image::Image::new(widget::image::Handle::from_rgba(
-            self.data.x_res, self.data.y_res, rgba_im.as_raw().clone(),
+        widget::image::Viewer::new(widget::image::Handle::from_rgba(
+            self.data.x_res,
+            self.data.y_res,
+            rgba_im.as_raw().clone(),
         ))
+        .width(iced::Fill)
         .into()
-        //widget::image::Viewer::new("test.png").into()
     }
     fn update(&mut self, message: Message) {
         match message {
@@ -185,7 +187,7 @@ impl From<&Args> for FractalData {
             let _ = create_dir(temp.clone());
             Some(temp)
         } else {
-            size = 2000;
+            size = INTERACTIVE_SIZE;
             None
         };
         FractalData {
@@ -439,8 +441,8 @@ fn make_ims(args: Args) {
                         Renderer::new(
                             fractal.image,
                             FractalData {
-                                y_res: 2000,
-                                x_res: 2000,
+                                y_res: INTERACTIVE_SIZE,
+                                x_res: INTERACTIVE_SIZE,
                                 top_left: data.top_left,
                                 bot_right: data.bot_right,
                                 pattern: data.pattern.clone(),
@@ -455,6 +457,7 @@ fn make_ims(args: Args) {
         }
     }
 }
+const INTERACTIVE_SIZE: u32 = 1000;
 fn main() {
     let args = Args::parse();
     println!("{:?}", args);
