@@ -19,3 +19,4 @@ This version does both of the things that v1 and v2 can do: it can launch an int
 4. If not running interactively, it will save the image and then do the next one; otherwise, it will launch the interactive viewer.
 ## Some images
 <img src="https://github.com/user-attachments/assets/ce25e3e6-6ba2-4ff4-a4ac-183acdbef062" width=200><img src="https://github.com/user-attachments/assets/8767dd68-2ccd-4973-9d5c-f2399816abc5" width=200><img src="https://github.com/user-attachments/assets/d4c2c2e7-946b-4109-a04e-1aff95bf07fc" width=200><img src="https://github.com/user-attachments/assets/206e8bc0-7274-44b4-bf4d-ccad1bfc3364" width=200>
+## [Running](help.md)
