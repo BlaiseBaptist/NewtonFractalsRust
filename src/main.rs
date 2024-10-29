@@ -1,6 +1,6 @@
 use clap::Parser;
 use iced;
-use iced::{advanced, widget};
+use iced::widget;
 use image::buffer::ConvertBuffer;
 use image::{ImageBuffer, RgbImage};
 use rand::random;
@@ -122,6 +122,7 @@ impl ops::Div<&c64> for &c64 {
     }
 }
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum Message {
     GenerateNew(c64, c64),
 }
