@@ -1,4 +1,5 @@
 
+
 ### Original program (v1) Rust: 
 Asks for the user to input roots, the associated function for the roots, and the derivative of that function. Then it would launch something you could interact with to zoom in and move around within the image.
 ### v2 Python: 
@@ -19,10 +20,15 @@ This version does both of the things that v1 and v2 can do: it can launch an int
 4. If not running interactively, it will save the image and then do the next one; otherwise, it will launch the interactive viewer.
 ## Some images
 <img src="https://github.com/user-attachments/assets/ce25e3e6-6ba2-4ff4-a4ac-183acdbef062" width=200><img src="https://github.com/user-attachments/assets/8767dd68-2ccd-4973-9d5c-f2399816abc5" width=200><img src="https://github.com/user-attachments/assets/d4c2c2e7-946b-4109-a04e-1aff95bf07fc" width=200><img src="https://github.com/user-attachments/assets/206e8bc0-7274-44b4-bf4d-ccad1bfc3364" width=200>
-# Steps to run
-*might need github destop if on windows*
-1. git clone
-2. get rust
-[installation methods](https://forge.rust-lang.org/infra/other-installation-methods.html)
-3. cargo r -r -- -h
-4. config args after the "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
+# Steps to Run
+
+
+1.
+       git clone https://github.com/BlaiseBaptist/NewtonFractalsRust.git
+
+  *Works on unix like terminals, you might need github desktop if on windows*
+  
+2. Get rust
+[installation methods can be found here](https://forge.rust-lang.org/infra/other-installation-methods.html)
+3. Cargo r -r -- -h
+4. Config args after the "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
