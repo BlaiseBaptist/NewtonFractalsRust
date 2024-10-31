@@ -31,4 +31,4 @@ This version does both of the things that v1 and v2 can do: it can launch an int
 2. Get rust
 [installation methods can be found here](https://forge.rust-lang.org/infra/other-installation-methods.html)
 3. Cargo r -r -- -h
-4. Config args after the "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
+4. Config args after "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
