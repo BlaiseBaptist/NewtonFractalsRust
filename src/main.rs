@@ -183,10 +183,9 @@ impl widget::canvas::Program<Message> for App {
                 iced::mouse::Event::WheelScrolled {
                     delta: iced::mouse::ScrollDelta::Pixels { x, y },
                 } => {
-                    state.x_scale += x as f64;
-                    state.y_scale += y as f64;
+                    state.x_scale += x as f64 / 1000.0;
+                    state.y_scale += y as f64 / 1000.0;
                     let corners = state.to_bounds(&bounds);
-                    println!("{:?}", corners);
                     status = (
                         canvas::event::Status::Captured,
                         Some(Message::UpdateCorners(corners.0, corners.1)),
