@@ -51,6 +51,14 @@ impl From<iced::Point> for c64 {
         }
     }
 }
+impl From<iced::Vector> for c64 {
+    fn from(item: iced::Vector) -> Self {
+        c64 {
+            r: item.x as f64,
+            i: item.y as f64,
+        }
+    }
+}
 impl TryFrom<(regex::Match<'_>, regex::Match<'_>)> for c64 {
     type Error = ParseFloatError;
     fn try_from(v: (regex::Match<'_>, regex::Match<'_>)) -> Result<Self, Self::Error> {
@@ -145,15 +153,21 @@ impl App {
         )
     }
     fn view(&self) -> iced::Element<Message> {
-        println!("tl:{:?},br:{:?}", self.data.top_left, self.data.bot_right);
-        canvas(self).height(750.0).width(750.0).into()
+        canvas(self)
+            .height(self.data.y_res as f32)
+            .width(self.data.x_res as f32)
+            .into()
     }
     fn update(&mut self, message: Message) {
         match message {
             Message::UpdateCorners(tl, br) => {
-                // need to make this scale right
-                self.data.top_left = &(&tl - &c64::new(250.0, 250.0)) / &c64::new(500.0, 0.0);
-                self.data.bot_right = &(&br - &c64::new(250.0, 250.0)) / &c64::new(500.0, 0.0);
+                let scaled_tl =
+                    c64::new(tl.r / self.data.x_res as f64, tl.i / self.data.y_res as f64);
+                let scaled_br =
+                    c64::new(br.r / self.data.x_res as f64, br.i / self.data.y_res as f64);
+                self.data.top_left = scaled_tl;
+                self.data.bot_right = scaled_br;
+                println!("{} to {}", self.data.top_left, self.data.bot_right);
                 self.image = make_im(&self.data).image;
             }
         }
@@ -163,11 +177,11 @@ impl widget::canvas::Program<Message> for App {
     type State = ZoomData;
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &iced::Renderer,
         _theme: &iced::Theme,
         bounds: iced::Rectangle,
-        _cursor: iced::mouse::Cursor,
+        cursor: iced::mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let rgba_im: image::RgbaImage = self.image.convert();
@@ -175,9 +189,25 @@ impl widget::canvas::Program<Message> for App {
             self.data.x_res,
             self.data.y_res,
             rgba_im.as_raw().clone(),
-        ))
-        .snap(true);
+        ));
         frame.draw_image(bounds, image);
+        match state.last_press {
+            Some(p) => frame.stroke_rectangle(
+                p,
+                (cursor.position().unwrap() - p).into(),
+                canvas::Stroke {
+                    style: canvas::Style::Solid(iced::Color::BLACK.scale_alpha(100.0)),
+                    width: 3.0,
+                    line_cap: canvas::LineCap::Square,
+                    line_join: canvas::LineJoin::Miter,
+                    line_dash: canvas::LineDash {
+                        segments: &[10.0, 0.0],
+                        offset: 0,
+                    },
+                },
+            ),
+            None => {}
+        };
         vec![frame.into_geometry()]
     }
     fn update(
@@ -191,24 +221,19 @@ impl widget::canvas::Program<Message> for App {
         match event {
             canvas::Event::Mouse(event) => match event {
                 iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
-                    println!("{:?}", cursor.position());
                     state.last_press = cursor.position();
+                    status = (canvas::event::Status::Captured, None);
                 }
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
-                    println!("{:?}", cursor.position());
                     status = (
                         canvas::event::Status::Captured,
                         (|| -> Option<Message> {
                             Some(Message::UpdateCorners(
-                                state.last_press?.into(),
-                                cursor.position()?.into(),
+                                (state.last_press? - bounds.center()).into(),
+                                (cursor.position()? - bounds.center()).into(),
                             ))
                         })(),
                     );
-                    status.1 = Some(Message::UpdateCorners(
-                        c64::new(100.0, 100.0),
-                        c64::new(400.0, 400.0),
-                    ));
                     state.last_press = None;
                 }
                 _ => {}
@@ -522,7 +547,7 @@ fn make_ims(args: Args) {
         }
     }
 }
-const INTERACTIVE_SIZE: u32 = 1000;
+const INTERACTIVE_SIZE: u32 = 750;
 fn main() {
     let args = Args::parse();
     println!("{:?}", args);
