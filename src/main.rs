@@ -1,6 +1,6 @@
 use clap::Parser;
 use iced;
-use iced::widget;
+use iced::{widget, widget::canvas};
 use image::buffer::ConvertBuffer;
 use image::{ImageBuffer, RgbImage};
 use rand::random;
@@ -43,10 +43,8 @@ impl From<i32> for c64 {
         }
     }
 }
-
 impl TryFrom<(regex::Match<'_>, regex::Match<'_>)> for c64 {
     type Error = ParseFloatError;
-
     fn try_from(v: (regex::Match<'_>, regex::Match<'_>)) -> Result<Self, Self::Error> {
         Ok(c64 {
             r: v.0.as_str().parse()?,
@@ -78,7 +76,6 @@ impl Display for c64 {
         if self.i == 0.0 {
             return write!(f, "({:.2})", self.r);
         }
-
         if self.i > 0.0 {
             return write!(f, "({:.2}+{:.2}i)", self.r, self.i);
         }
@@ -122,18 +119,17 @@ impl ops::Div<&c64> for &c64 {
     }
 }
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 enum Message {
-    GenerateNew(c64, c64),
+    UpdateCorners(c64, c64),
 }
-struct Renderer {
+struct App {
     image: RgbImage,
     data: FractalData,
 }
-impl Renderer {
+impl App {
     fn new(im: RgbImage, data: FractalData) -> (Self, iced::Task<Message>) {
         (
-            Renderer {
+            App {
                 image: im,
                 data: data,
             },
@@ -141,22 +137,92 @@ impl Renderer {
         )
     }
     fn view(&self) -> iced::Element<Message> {
-        let rgba_im: image::RgbaImage = self.image.convert();
-        widget::image::Viewer::new(widget::image::Handle::from_rgba(
-            self.data.x_res,
-            self.data.y_res,
-            rgba_im.as_raw().clone(),
-        ))
-        .width(iced::Fill)
-        .into()
+        canvas(self).height(iced::Fill).width(iced::Fill).into()
     }
     fn update(&mut self, message: Message) {
         match message {
-            Message::GenerateNew(tl, br) => {
+            Message::UpdateCorners(tl, br) => {
                 self.data.top_left = tl;
                 self.data.bot_right = br;
                 self.image = make_im(&self.data).image;
             }
+        }
+    }
+}
+impl widget::canvas::Program<Message> for App {
+    type State = ZoomData;
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        bounds: iced::Rectangle,
+        _cursor: iced::mouse::Cursor,
+    ) -> Vec<canvas::Geometry> {
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        let rgba_im: image::RgbaImage = self.image.convert();
+        let image = canvas::Image::new(widget::image::Handle::from_rgba(
+            self.data.x_res,
+            self.data.y_res,
+            rgba_im.as_raw().clone(),
+        ))
+        .snap(true);
+        frame.draw_image(bounds, image);
+        vec![frame.into_geometry()]
+    }
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: canvas::Event,
+        bounds: iced::Rectangle,
+        _cursor: iced::mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        let mut status = (canvas::event::Status::Ignored, None);
+        match event {
+            canvas::Event::Mouse(event) => match event {
+                iced::mouse::Event::WheelScrolled {
+                    delta: iced::mouse::ScrollDelta::Pixels { x, y },
+                } => {
+                    state.x_scale += x as f64;
+                    state.y_scale += y as f64;
+                    let corners = state.to_bounds(&bounds);
+                    println!("{:?}", corners);
+                    status = (
+                        canvas::event::Status::Captured,
+                        Some(Message::UpdateCorners(corners.0, corners.1)),
+                    );
+                }
+                _ => {}
+            },
+            _ => {}
+        };
+        status
+    }
+}
+struct ZoomData {
+    x_scale: f64,
+    y_scale: f64,
+    x_shift: f64,
+    y_shift: f64,
+}
+impl ZoomData {
+    fn to_bounds(&self, bounds: &iced::Rectangle) -> (c64, c64) {
+        (
+            c64::new(self.x_shift, self.y_shift),
+            c64::new(
+                self.x_shift + bounds.size().width as f64 * self.x_scale,
+                self.y_shift + bounds.size().height as f64 * self.y_scale,
+            ),
+        )
+    }
+}
+impl std::default::Default for ZoomData {
+    fn default() -> Self {
+        ZoomData {
+            x_scale: 1.0,
+            y_scale: 1.0,
+            x_shift: 0.0,
+            y_shift: 0.0,
         }
     }
 }
@@ -437,23 +503,21 @@ fn make_ims(args: Args) {
                 let _ = fractal.image.save(p);
             }
             None => {
-                let _ = iced::application("fractal", Renderer::update, Renderer::view).run_with(
-                    move || {
-                        Renderer::new(
-                            fractal.image,
-                            FractalData {
-                                y_res: INTERACTIVE_SIZE,
-                                x_res: INTERACTIVE_SIZE,
-                                top_left: data.top_left,
-                                bot_right: data.bot_right,
-                                pattern: data.pattern.clone(),
-                                colors: data.colors,
-                                roots: data.roots,
-                                path: None,
-                            },
-                        )
-                    },
-                );
+                let _ = iced::application("fractal", App::update, App::view).run_with(move || {
+                    App::new(
+                        fractal.image,
+                        FractalData {
+                            y_res: INTERACTIVE_SIZE,
+                            x_res: INTERACTIVE_SIZE,
+                            top_left: data.top_left,
+                            bot_right: data.bot_right,
+                            pattern: data.pattern.clone(),
+                            colors: data.colors,
+                            roots: data.roots,
+                            path: None,
+                        },
+                    )
+                });
             }
         }
     }
@@ -470,7 +534,6 @@ fn main() {
     }
     make_ims(args);
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
