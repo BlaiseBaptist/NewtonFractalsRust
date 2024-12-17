@@ -29,6 +29,10 @@ impl c64 {
     fn sum(&self) -> f64 {
         self.r + self.i
     }
+    fn scale(&self, top_left: &c64, bot_right: &c64, height: f64, width: f64) -> c64 {
+        let diff = bot_right - top_left;
+        &c64::new(self.r * diff.r / width, self.i * diff.i / height) + top_left
+    }
 }
 impl From<f64> for c64 {
     fn from(item: f64) -> Self {
@@ -153,20 +157,13 @@ impl App {
         )
     }
     fn view(&self) -> iced::Element<Message> {
-        canvas(self)
-            .height(self.data.y_res as f32)
-            .width(self.data.x_res as f32)
-            .into()
+        canvas(self).height(800.0).width(800.0).into()
     }
     fn update(&mut self, message: Message) {
         match message {
             Message::UpdateCorners(tl, br) => {
-                let scaled_tl =
-                    c64::new(tl.r / self.data.x_res as f64, tl.i / self.data.y_res as f64);
-                let scaled_br =
-                    c64::new(br.r / self.data.x_res as f64, br.i / self.data.y_res as f64);
-                self.data.top_left = scaled_tl;
-                self.data.bot_right = scaled_br;
+                self.data.top_left = tl;
+                self.data.bot_right = br;
                 println!("{} to {}", self.data.top_left, self.data.bot_right);
                 self.image = make_im(&self.data).image;
             }
@@ -189,7 +186,8 @@ impl widget::canvas::Program<Message> for App {
             self.data.x_res,
             self.data.y_res,
             rgba_im.as_raw().clone(),
-        ));
+        ))
+        .opacity(0.1);
         frame.draw_image(bounds, image);
         match state.last_press {
             Some(p) => frame.stroke_rectangle(
@@ -219,18 +217,39 @@ impl widget::canvas::Program<Message> for App {
     ) -> (canvas::event::Status, Option<Message>) {
         let mut status = (canvas::event::Status::Ignored, None);
         match event {
+            canvas::Event::Keyboard(event) => match event {
+                iced::keyboard::Event::KeyPressed { .. } => {
+                    status = (
+                        canvas::event::Status::Captured,
+                        Some(Message::UpdateCorners(
+                            c64::new(-0.5, -0.5),
+                            c64::new(0.5, 0.5),
+                        )),
+                    )
+                }
+                _ => {}
+            },
             canvas::Event::Mouse(event) => match event {
                 iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
                     state.last_press = cursor.position();
-                    status = (canvas::event::Status::Captured, None);
                 }
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
                     status = (
                         canvas::event::Status::Captured,
                         (|| -> Option<Message> {
                             Some(Message::UpdateCorners(
-                                (state.last_press? - bounds.center()).into(),
-                                (cursor.position()? - bounds.center()).into(),
+                                c64::from(state.last_press?).scale(
+                                    &self.data.top_left,
+                                    &self.data.bot_right,
+                                    bounds.size().height as f64,
+                                    bounds.size().width as f64,
+                                ),
+                                c64::from(cursor.position()?).scale(
+                                    &self.data.top_left,
+                                    &self.data.bot_right,
+                                    bounds.size().height as f64,
+                                    bounds.size().width as f64,
+                                ),
                             ))
                         })(),
                     );
@@ -547,7 +566,7 @@ fn make_ims(args: Args) {
         }
     }
 }
-const INTERACTIVE_SIZE: u32 = 750;
+const INTERACTIVE_SIZE: u32 = 1000;
 fn main() {
     let args = Args::parse();
     println!("{:?}", args);
