@@ -43,6 +43,14 @@ impl From<i32> for c64 {
         }
     }
 }
+impl From<iced::Point> for c64 {
+    fn from(item: iced::Point) -> Self {
+        c64 {
+            r: item.x as f64,
+            i: item.y as f64,
+        }
+    }
+}
 impl TryFrom<(regex::Match<'_>, regex::Match<'_>)> for c64 {
     type Error = ParseFloatError;
     fn try_from(v: (regex::Match<'_>, regex::Match<'_>)) -> Result<Self, Self::Error> {
@@ -137,13 +145,15 @@ impl App {
         )
     }
     fn view(&self) -> iced::Element<Message> {
-        canvas(self).height(iced::Fill).width(iced::Fill).into()
+        println!("tl:{:?},br:{:?}", self.data.top_left, self.data.bot_right);
+        canvas(self).height(750.0).width(750.0).into()
     }
     fn update(&mut self, message: Message) {
         match message {
             Message::UpdateCorners(tl, br) => {
-                self.data.top_left = tl;
-                self.data.bot_right = br;
+                // need to make this scale right
+                self.data.top_left = &(&tl - &c64::new(250.0, 250.0)) / &c64::new(500.0, 0.0);
+                self.data.bot_right = &(&br - &c64::new(250.0, 250.0)) / &c64::new(500.0, 0.0);
                 self.image = make_im(&self.data).image;
             }
         }
@@ -175,21 +185,31 @@ impl widget::canvas::Program<Message> for App {
         state: &mut Self::State,
         event: canvas::Event,
         bounds: iced::Rectangle,
-        _cursor: iced::mouse::Cursor,
+        cursor: iced::mouse::Cursor,
     ) -> (canvas::event::Status, Option<Message>) {
         let mut status = (canvas::event::Status::Ignored, None);
         match event {
             canvas::Event::Mouse(event) => match event {
-                iced::mouse::Event::WheelScrolled {
-                    delta: iced::mouse::ScrollDelta::Pixels { x, y },
-                } => {
-                    state.x_scale += x as f64 / 1000.0;
-                    state.y_scale += y as f64 / 1000.0;
-                    let corners = state.to_bounds(&bounds);
+                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
+                    println!("{:?}", cursor.position());
+                    state.last_press = cursor.position();
+                }
+                iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                    println!("{:?}", cursor.position());
                     status = (
                         canvas::event::Status::Captured,
-                        Some(Message::UpdateCorners(corners.0, corners.1)),
+                        (|| -> Option<Message> {
+                            Some(Message::UpdateCorners(
+                                state.last_press?.into(),
+                                cursor.position()?.into(),
+                            ))
+                        })(),
                     );
+                    status.1 = Some(Message::UpdateCorners(
+                        c64::new(100.0, 100.0),
+                        c64::new(400.0, 400.0),
+                    ));
+                    state.last_press = None;
                 }
                 _ => {}
             },
@@ -199,30 +219,11 @@ impl widget::canvas::Program<Message> for App {
     }
 }
 struct ZoomData {
-    x_scale: f64,
-    y_scale: f64,
-    x_shift: f64,
-    y_shift: f64,
-}
-impl ZoomData {
-    fn to_bounds(&self, bounds: &iced::Rectangle) -> (c64, c64) {
-        (
-            c64::new(self.x_shift, self.y_shift),
-            c64::new(
-                self.x_shift + bounds.size().width as f64 * self.x_scale,
-                self.y_shift + bounds.size().height as f64 * self.y_scale,
-            ),
-        )
-    }
+    last_press: Option<iced::Point>,
 }
 impl std::default::Default for ZoomData {
     fn default() -> Self {
-        ZoomData {
-            x_scale: 1.0,
-            y_scale: 1.0,
-            x_shift: 0.0,
-            y_shift: 0.0,
-        }
+        ZoomData { last_press: None }
     }
 }
 struct Fractal {
