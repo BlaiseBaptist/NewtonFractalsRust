@@ -366,10 +366,10 @@ struct Args {
     #[arg(short, long, default_value_t = 10000, help = "Number of pixels across")]
     size: u32,
 
-    #[arg(short, long, default_value = "flat")]
+    #[arg(short, long, default_value = "shade")]
     pattern: String,
 
-    #[arg(short, long, default_value_t = 20, help = "How many roots")]
+    #[arg(short, long, default_value_t = 10, help = "How many roots")]
     len: usize,
 
     #[arg(short, long, default_value_t = 1, help = "Number of images to make")]
