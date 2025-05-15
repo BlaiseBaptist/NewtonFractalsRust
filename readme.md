@@ -22,14 +22,16 @@ This version does both of the things that v1 and v2 can do: it can launch an int
 <img src="https://github.com/user-attachments/assets/ce25e3e6-6ba2-4ff4-a4ac-183acdbef062" width=200><img src="https://github.com/user-attachments/assets/8767dd68-2ccd-4973-9d5c-f2399816abc5" width=200><img src="https://github.com/user-attachments/assets/d4c2c2e7-946b-4109-a04e-1aff95bf07fc" width=200><img src="https://github.com/user-attachments/assets/206e8bc0-7274-44b4-bf4d-ccad1bfc3364" width=200>
 # Steps to Run
 
+## Download Binaries
 
-1.
-       git clone https://github.com/BlaiseBaptist/NewtonFractalsRust.git
+1.  Download zip for your OS and run
+
+2.  for command line args run the executable with -h to see the avalible options
+
+## Build from Source
+1.  git clone https://github.com/BlaiseBaptist/NewtonFractalsRust.git
 
   *Works on unix like terminals, you might need github desktop if on windows*
-  
-2. Get rust
-[installation methods can be found here](https://forge.rust-lang.org/infra/other-installation-methods.html)
-3.
-       cargo r -r -- -h
-5. Config args after "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
+
+2.  cargo r -r -- -h
+3.  Config args after "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
