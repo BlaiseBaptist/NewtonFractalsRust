@@ -29,9 +29,9 @@ This version does both of the things that v1 and v2 can do: it can launch an int
 2.  for command line args run the executable with -h to see the avalible options
 
 ## Build from Source
-1.  git clone https://github.com/BlaiseBaptist/NewtonFractalsRust.git
+1.  `git clone https://github.com/BlaiseBaptist/NewtonFractalsRust.git`
 
   *Works on unix like terminals, you might need github desktop if on windows*
 
-2.  cargo r -r -- -h
+2.  `cargo r -r -- -h`
 3.  Config args after "cargo r -r --" [help with cargo run args can be found here](https://doc.rust-lang.org/cargo/commands/cargo-run.html)
